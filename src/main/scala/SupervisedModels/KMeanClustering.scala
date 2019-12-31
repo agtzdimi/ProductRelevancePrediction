@@ -1,4 +1,4 @@
-package MlModels
+package SupervisedModels
 
 class KMeanClustering {
 
