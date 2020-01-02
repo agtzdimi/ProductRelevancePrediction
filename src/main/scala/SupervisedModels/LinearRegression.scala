@@ -1,40 +1,39 @@
 package SupervisedModels
 
-import Preprocessing.LabelPoints
+import Preprocessing.{DataframeManager, LabelPoints}
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.regression.{LabeledPoint, LinearRegressionWithSGD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 class LinearRegression extends Serializable {
 
-   def runPrediction(trainingDfData: DataFrame, sc: SparkContext, ss: SparkSession): Unit = {
-      val labelpoint = new LabelPoints()
-      labelpoint.createLabelPoints(trainingDfData, ss)
-      val data = MLUtils.loadLibSVMFile(sc, "src/main/resources/trainLabeledVectors.csv")
+  def runPrediction(trainingDfData: DataFrame, sc: SparkContext, ss: SparkSession): Unit = {
+    val labelpoint = new LabelPoints()
+    labelpoint.createLabelPoints(trainingDfData, ss)
 
-      /** Creation of ML Model, as Labeled file, we can create it, save it to memory, for future uses */
+    val dataframeManager = new DataframeManager()
+    val filteredData: RDD[LabeledPoint] = dataframeManager.getTopFeatures(sc, 500)
 
-      val splits = data.randomSplit(Array(0.6, 0.4), seed = 1234L)
-      val (trainingData, testData) = (splits(0), splits(1))
+    val splits = filteredData.randomSplit(Array(0.6, 0.4), seed = 1234L)
+    val (trainingData, testData) = (splits(0), splits(1))
 
-      trainingData.cache()
-      testData.cache()
+    trainingData.cache()
+    testData.cache()
+    println("")
+    println("Applying Linear regression...")
 
-      println("Applying Linear regression...")
+    val model = LinearRegressionWithSGD.train(trainingData, 100, 0.3)
 
-      val model = LinearRegressionWithSGD.train(trainingData, 100, 1.0)
+    /** Evaluation of Linear Regression on test instances and compute test error */
+    val labelsAndPredictions = testData.map { point =>
+      val prediction = model.predict(point.features)
+      (point.label, prediction)
+    }
+    val testMSE = labelsAndPredictions.map { case (v, p) => math.pow(v - p, 2) }.mean()
+    println("Test Mean Squared Error = " + testMSE)
 
-      /** Evaluation of Linear Regression on test instances and compute test error */
-      val labelsAndPredictions = testData.map { point =>
-         val prediction = model.predict(point.features)
-         (point.label, prediction)
-      }
-      val testMSE = labelsAndPredictions.map { case (v, p) => math.pow(v - p, 2) }.mean()
-      println("Test Mean Squared Error = " + testMSE)
-      sc.stop()
-
-   }
+  }
 
 
 }
