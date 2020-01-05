@@ -46,7 +46,6 @@ object ProductRelevance {
     /** Create a dataframe containing all the dataframes joined to access every piece of information
       */
     val joinDescTestTrainDF = dataframeManager.joinDataframes(joinTrainTestDF, descriptionDF, ss, sc)
-    joinTrainTestDF.take(5).foreach(println)
 
     /** In order to calculate the results of the ML Models
       * we need to prepare the data for fit & predict.
@@ -60,44 +59,43 @@ object ProductRelevance {
     /* ================== REGRESSION ===================== */
     /* ================== Decision Tree ====================*/
     /* ======================================================= */
-
-    println("Defining features and label for the model...")
-    var trainingDfData = trainingDfDataInit.select("label", "features")
-    val decisionTree_Regressor = new DecisionTree()
-    decisionTree_Regressor.runPrediction(trainingDfData, sc, ss)
+   println("Defining features and label for the model...")
+   var trainingDfData = trainingDfDataInit.select("label", "features")
+   val decisionTree_Regressor = new DecisionTree()
+   decisionTree_Regressor.runPrediction(trainingDfData, sc, ss)
 
     //
     /* ======================================================= */
     /* ================== REGRESSION ===================== */
     /* ================== Random Forest ================== */
     /* ======================================================= */
-    println("Defining features and label for the model...")
-    trainingDfData = trainingDfDataInit.select("features", "label")
-    val random_forest_Regressor = new RandomForest()
-    random_forest_Regressor.runPrediction(trainingDfData, sc, ss)
+   println("Defining features and label for the model...")
+   trainingDfData = trainingDfDataInit.select("features", "label")
+   val random_forest_Regressor = new RandomForest()
+   random_forest_Regressor.runPrediction(trainingDfData, sc, ss)
 
     //
     /* ======================================================= */
     /* ================== REGRESSION ===================== */
     /* ================== Gradient Boosted Trees ================== */
     /* ======================================================= */
-    println("Defining features and label for the model...")
-    trainingDfData = trainingDfDataInit.select("features", "label")
-    val gradient_boosted_trees = new GradientBoostedTrees()
-    gradient_boosted_trees.runPrediction(trainingDfData, sc, ss)
+   println("Defining features and label for the model...")
+   trainingDfData = trainingDfDataInit.select("features", "label")
+   val gradient_boosted_trees = new GradientBoostedTrees()
+   gradient_boosted_trees.runPrediction(trainingDfData, sc, ss)
 
     /* ======================================================= */
     /* ================== REGRESSION ===================== */
     /* ================== Linear Regression ================== */
     /* ======================================================= */
-    println("Defining features and label for the model...")
-    trainingDfData = trainingDfDataInit.select("features", "label")
-    val linearRegression = new LinearRegression()
-    linearRegression.runPrediction(trainingDfData, sc, ss)
+   println("Defining features and label for the model...")
+   trainingDfData = trainingDfDataInit.select("features", "label")
+   val linearRegression = new LinearRegression()
+   linearRegression.runPrediction(trainingDfData, sc, ss)
 
     /* ======================================================= */
     /* ================== REGRESSION ===================== */
-    /* ================== Linear Regression ================== */
+    /* ================== Naive Bayes ================== */
     /* ======================================================= */
     println("Defining features and label for the model...")
     trainingDfData = trainingDfDataInit.select("features", "label")
@@ -113,12 +111,31 @@ object ProductRelevance {
     println("Defining features and label for the model...")
     val prod_df = dataframeManager.unsupervisedProdPreprocessing(train_input, ss, sc)
     val descr_df = dataframeManager.unsupervisedDescrPreprocessing(descriptions_input, ss, sc)
+
+    // Calculate Cosine Similarity and apply KMeans
+
     val kmeans_features_df = dataframeManager.unsupervisedFeatureSelection(prod_df, descr_df, ss, sc)
     val kmeans_training_data_df = dataframeManager.kmeansPreprocessing(kmeans_features_df)
-    // Apply KMeans
+
     val kmeans = new KMeansClustering()
     val prediction_df = kmeans.runPrediction(kmeans_training_data_df)
-    kmeans.getMetrics(prediction_df, "f1-score", ss, sc)
+    kmeans.getMetrics(prediction_df, "f1-score", ss, sc, "Cosine")
+
+    // Calculate Jacccard Similarity and apply KMeans
+
+    val jaccardSimilarityDF = dataframeManager.calcJacccardSimilarity(searchDF,joinDescTestTrainDF,ss,sc)
+    val kmeans_training_data_df2 = dataframeManager.kmeansPreprocessing(jaccardSimilarityDF)
+
+    val prediction_df2 = kmeans.runPrediction(kmeans_training_data_df2)
+    kmeans.getMetrics(prediction_df2, "f1-score", ss, sc, "Jaccard")
+
+    // Calculate Euclidean Similarity and apply KMeans
+
+    val euclSimilarityDF = dataframeManager.calcEuclideanSimilarity(searchDF,joinDescTestTrainDF,ss,sc)
+    val kmeans_training_data_df3 = dataframeManager.kmeansPreprocessing(euclSimilarityDF)
+
+    val prediction_df3 = kmeans.runPrediction(kmeans_training_data_df3)
+    kmeans.getMetrics(prediction_df3, "f1-score", ss, sc, "Euclidean")
 
     sc.stop()
   }

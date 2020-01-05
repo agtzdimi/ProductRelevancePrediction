@@ -10,6 +10,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{udf, _}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.ml.Pipeline
 
 
 class DataframeManager() extends Serializable {
@@ -285,15 +286,13 @@ class DataframeManager() extends Serializable {
 
     val finalFilteredWordsDf = filteredWordsDf.select($"rProductUID", $"rFilteredNameValuesWords")
       .withColumnRenamed("rFilteredNameValuesWords", "rFilteredWords")
-    finalFilteredWordsDf.printSchema()
 
     finalFilteredWordsDf
   }
 
   def unsupervisedProdPreprocessing(prodFilePath: String, sparkSession: SparkSession, sc: SparkContext): DataFrame = {
     val stopWordsInput = sc.textFile("src/main/resources/stopwords.csv")
-    val stopWords = stopWordsInput.flatMap(x => x.split("\\W+")).collect()
-    import sparkSession.implicits._ // For implicit conversions like converting RDDs to DataFrames
+    val stopWords = stopWordsInput.flatMap(x => x.split("\\W+")).collect() // For implicit conversions like converting RDDs to DataFrames
 
     val prod_df = sparkSession.read.option("header", true).csv(prodFilePath)
     // Create tokens of words
@@ -331,8 +330,7 @@ class DataframeManager() extends Serializable {
 
   def unsupervisedDescrPreprocessing(descrFilePath: String, sparkSession: SparkSession, sc: SparkContext): DataFrame = {
     val stopWordsInput = sc.textFile("src/main/resources/stopwords.csv")
-    val stopWords = stopWordsInput.flatMap(x => x.split("\\W+")).collect()
-    import sparkSession.implicits._ // For implicit conversions like converting RDDs to DataFrames
+    val stopWords = stopWordsInput.flatMap(x => x.split("\\W+")).collect() // For implicit conversions like converting RDDs to DataFrames
 
     val descr_df = sparkSession.read.option("header", true).csv(descrFilePath)
 
@@ -369,8 +367,7 @@ class DataframeManager() extends Serializable {
     return norm_features
   }
 
-  def unsupervisedFeatureSelection(prod_df: DataFrame, descr_df: DataFrame, sparkSession: SparkSession, sc: SparkContext): DataFrame = {
-    import sparkSession.implicits._ // For implicit conversions like converting RDDs to DataFrames
+  def unsupervisedFeatureSelection(prod_df: DataFrame, descr_df: DataFrame, sparkSession: SparkSession, sc: SparkContext): DataFrame = { // For implicit conversions like converting RDDs to DataFrames
 
     // Create a joined data view
     val joined_df = prod_df.join(descr_df, "product_uid")
@@ -436,4 +433,103 @@ class DataframeManager() extends Serializable {
 
     return filteredData
   }
+
+  def calcJacccardSimilarity(searchDataframe: DataFrame,featuresDataframe:DataFrame,ss : SparkSession,sc: SparkContext) : DataFrame = {
+    /*First Find the TF using Hashing TF. CountVectorizer can also be used */
+    val hashingTF = new HashingTF().setInputCol("rFilteredWords").setOutputCol("rTFFeatures").setNumFeatures(20000)
+    val featurizedDF = hashingTF.transform(featuresDataframe)
+    val featuresTF = featurizedDF.select("rID","rTFFeatures","rRelevance")
+
+    val joinedDF = featuresTF.join(searchDataframe,"rID").select("rID","rProductUID","rSearchTermFeatures","rTFFeatures","rRelevance").orderBy("rID")
+
+    /*Create MinHash object*/
+    val lsh = new MinHashLSH().setInputCol("rTFFeatures").setOutputCol("LSH").setNumHashTables(3)
+
+    /*Create Pipeline model*/
+    val pipe = new Pipeline().setStages(Array(lsh))
+    val pipeModel = pipe.fit(joinedDF)
+
+    /*Create the new DF*/
+
+    val transformedDF = pipeModel.transform(joinedDF)
+
+    /*Create Transformer*/
+    val transformer = pipeModel.stages
+
+    /*MinHashModel*/
+    val tempMinHashModel = transformer.last.asInstanceOf[MinHashLSHModel]
+    val threshold = 1.5
+
+    /*Just a udf for converting string to double*/
+    val udf_toDouble = udf( (s: String) => s.toDouble )
+
+
+    /*Perform the Similarity with self-join*/
+    /*Find the distance of pairs which is lower than the given threshold*/
+
+    val preSimilarityDF = tempMinHashModel.approxSimilarityJoin(transformedDF,transformedDF,threshold)
+      .select(udf_toDouble(col("datasetA.rRelevance")).alias("relevance"),
+        col("distCol"))
+
+    /*Make a vector of the distCol and name it Similarity. It will be needed when using the df for the ML Models*/
+    val vectorAssem = new VectorAssembler()
+      .setInputCols(Array("distCol"))
+      .setOutputCol("Similarity")
+
+    val relevance_binarizer = udf((x: Double) => if (x < 1.5) 0 else 1)
+
+    val jaccardSimilarityDF = vectorAssem.transform(preSimilarityDF).select("Similarity","relevance")
+      .withColumn("binarized_relevance", lit(relevance_binarizer(col("relevance").cast("Double"))))
+
+    jaccardSimilarityDF
+  }
+
+  def calcEuclideanSimilarity(searchDataframe: DataFrame,featuresDataframe:DataFrame,ss : SparkSession,sc: SparkContext) : DataFrame ={
+    /*First Find the TF using Hashing TF. CountVectorizer can also be used */
+    val hashingTF = new HashingTF().setInputCol("rFilteredWords").setOutputCol("rTFFeatures").setNumFeatures(20000)
+    val featurizedDF = hashingTF.transform(featuresDataframe)
+
+    val featuresTF = featurizedDF.select("rID","rTFFeatures","rRelevance")
+    val joinedDF = featuresTF.join(searchDataframe,"rID").select("rID","rSearchTermFeatures","rTFFeatures","rRelevance").orderBy("rID")
+
+    val brp = new BucketedRandomProjectionLSH()
+      .setBucketLength(2.0)
+      .setNumHashTables(3)
+      .setInputCol("rTFFeatures")
+      .setOutputCol("BRPHashes")
+
+    /*Create Pipeline model*/
+    val pipe = new Pipeline().setStages(Array(brp))
+    val pipeModel = pipe.fit(featuresTF)
+
+    /*Transform the Dataframe*/
+    val transformedDF = pipeModel.transform(joinedDF)
+
+    /*Create Transformer*/
+    val transformer = pipeModel.stages
+    /*MinHashModel*/
+    val tempMinHashModel = transformer.last.asInstanceOf[BucketedRandomProjectionLSHModel]
+
+    /*Threshold*/
+    val threshold = 1.5
+
+    /*Just a udf for converting string to double*/
+    val udf_toDouble = udf( (s: String) => s.toDouble )
+
+    val preEuclideanSimilarityDF = tempMinHashModel.approxSimilarityJoin(transformedDF,transformedDF,threshold,"distCol")
+      .select(udf_toDouble(col("datasetA.rRelevance")).alias("relevance"),
+        col("distCol"))
+
+    /*Make a vector of the distCol and name it Similarity. It will be needed when using the df for the ML Models*/
+    val vectorAssem2 = new VectorAssembler()
+      .setInputCols(Array("distCol"))
+      .setOutputCol("Similarity")
+
+    val relevance_binarizer = udf((x: Double) => if (x < 1.5) 0 else 1)
+    val euclideanSimilarityDF = vectorAssem2.transform(preEuclideanSimilarityDF).select("Similarity","relevance")
+      .withColumn("binarized_relevance", lit(relevance_binarizer(col("relevance").cast("Double"))))
+
+    euclideanSimilarityDF
+  }
+
 }

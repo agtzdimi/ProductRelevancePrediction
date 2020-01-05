@@ -22,7 +22,7 @@ class KMeansClustering {
 
   }
 
-  def getMetrics(prediction_df: DataFrame, metric: String, sparkSession: SparkSession, sc: SparkContext): Unit = {
+  def getMetrics(prediction_df: DataFrame, metric: String, sparkSession: SparkSession, sc: SparkContext, similarityType: String): Unit = {
     import sparkSession.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
     val predictionAndLabels = prediction_df.select("prediction", "binarized_relevance").rdd.map { case Row(p: Double, l: Double) => (p, l) }
@@ -38,9 +38,9 @@ class KMeansClustering {
     val max_precision_score = precision.select(max("precision")).head().getDouble(0)
 
     metric match {
-      case "precision" => println("The precision is: ", max_precision_score)
-      case "recall" => println("The recall is: ", max_recall_score)
-      case "f1-score" => println("The f1-score is: ", max_f1_score)
+      case "precision" => println("The precision score for " + similarityType + " is: " + max_precision_score)
+      case "recall" => println("The recall score for " + similarityType + " is: " + max_recall_score)
+      case "f1-score" => println("The f1-score for " + similarityType + " is: " + max_f1_score)
       case _ => println("Invalid metric: \"precision | recall | f1-score\"")
     }
 
