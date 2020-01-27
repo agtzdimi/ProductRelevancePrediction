@@ -26,7 +26,7 @@ class NaiveBayes {
     trainingData.cache()
     testData.cache()
 
-    val model = NaiveBayes.train(trainingData, lambda = 1.0, modelType = "multinomial")
+    val model = NaiveBayes.train(trainingData, lambda = 0.1, modelType = "multinomial")
 
     /** Evaluation of Linear Regression on test instances and compute test error */
     val labelsAndPredictions = testData.map { point =>

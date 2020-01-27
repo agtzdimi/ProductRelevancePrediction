@@ -17,15 +17,19 @@ object ProductRelevance {
     conf.set("spark.hadoop.validateOutputSpecs", "false")
     conf.set("spark.executor.instances", "1")
     conf.set("spark.executor.cores", "8")
+    conf.set("spark.executor.memory", "2g")
+    conf.set("spark.cores.max", "8")
+    conf.set("spark.eventLog.enabled", "true")
+    conf.set("spark.eventLog.dir", "src/main/resources/spark-logs")
     Logger.getLogger("org").setLevel(Level.OFF)
     Logger.getLogger("akka").setLevel(Level.OFF)
     val sc = new SparkContext(conf)
     val ss = SparkSession.builder().master("local[*]").appName("Text Mining Project").getOrCreate()
     import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
-    val train_input = "src/main/resources/train_sample.csv"
-    val attributes_input = "src/main/resources/attributes_sample.csv"
-    val descriptions_input = "src/main/resources/product_descriptions_sample.csv"
+    val train_input = "src/main/resources/train.csv"
+    val attributes_input = "src/main/resources/attributes.csv"
+    val descriptions_input = "src/main/resources/product_descriptions.csv"
 
     val dataframeManager = new DataframeManager()
 

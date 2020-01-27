@@ -31,8 +31,8 @@ class DecisionTree extends Serializable {
     if (!modelExist) {
       val categoricalFeaturesInfo = Map[Int, Int]()
       val impurity = "variance"
-      val maxDepth = 5
-      val maxBins = 32
+      val maxDepth = 20
+      val maxBins = 100
       val model = DecisionTree.trainRegressor(trainingData, categoricalFeaturesInfo, impurity, maxDepth, maxBins)
       model.save(sc, "target/tmp/myDecisionTreeRegressionModel")
 

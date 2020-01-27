@@ -35,11 +35,11 @@ class RandomForest extends Serializable {
 
       val numClasses = 2
       val categoricalFeaturesInfo = Map[Int, Int]()
-      val numTrees = 5
+      val numTrees = 50
       val featureSubsetStrategy = "auto" // Let the algorithm choose.
       val impurity = "variance"
-      val maxDepth = 5
-      val maxBins = 32
+      val maxDepth = 20
+      val maxBins = 100
 
       val model = RandomForest.trainRegressor(trainingData, categoricalFeaturesInfo,
         numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)

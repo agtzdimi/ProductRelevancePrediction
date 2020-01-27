@@ -32,8 +32,8 @@ class GradientBoostedTrees {
     if (!modelExist) {
 
       val boostingStrategy = BoostingStrategy.defaultParams("Regression")
-      boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
-      boostingStrategy.treeStrategy.maxDepth = 5
+      boostingStrategy.numIterations = 30 // Note: Use more iterations in practice.
+      boostingStrategy.treeStrategy.maxDepth = 8
       // Empty categoricalFeaturesInfo indicates all features are continuous.
       boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
 

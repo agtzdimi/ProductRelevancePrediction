@@ -71,6 +71,53 @@ class DataframeManager() extends Serializable {
     val result = x
       .replaceAll("\\bSome.\\b", " ")
       .replaceAll("°", "degrees")
+      .replaceAll("\\\bzero\\\b", "0")
+      .replaceAll("\\\bone\\\b", "1")
+      .replaceAll("\\\btwo\\\b", "2")
+      .replaceAll("\\\bthree\\\b", "3")
+      .replaceAll("\\\bfour\\\b", "4")
+      .replaceAll("\\\bfive\\\b", "5")
+      .replaceAll("\\\bsix\\\b", "6")
+      .replaceAll("\\\bseven\\\b", "7")
+      .replaceAll("\\\beight\\\b", "8")
+      .replaceAll("\\\bnine\\\b", "9")
+      .replaceAll("([0-9]+)( *)(inches|inch|in|')\\.?", "\\1in.")
+      .replaceAll("([0-9]+)( *)(foot|feet|ft|'')\\.?", "\\1ft.")
+      .replaceAll("([0-9]+)( *)(pounds|pound|lbs|lb)\\.?", "\\1lb.")
+      .replaceAll(" x ", " xby ")
+      .replaceAll(" by ", " xby ")
+      .replaceAll("x0", " xby 0")
+      .replaceAll("x1", " xby 1")
+      .replaceAll("x2", " xby 2")
+      .replaceAll("x3", " xby 3")
+      .replaceAll("x4", " xby 4")
+      .replaceAll("x5", " xby 5")
+      .replaceAll("x6", " xby 6")
+      .replaceAll("x7", " xby 7")
+      .replaceAll("x8", " xby 8")
+      .replaceAll("x9", " xby 9")
+      .replaceAll("0x", "0 xby ")
+      .replaceAll("1x", "1 xby ")
+      .replaceAll("2x", "2 xby ")
+      .replaceAll("3x", "3 xby ")
+      .replaceAll("4x", "4 xby ")
+      .replaceAll("5x", "5 xby ")
+      .replaceAll("6x", "6 xby ")
+      .replaceAll("7x", "7 xby ")
+      .replaceAll("8x", "8 xby ")
+      .replaceAll("9x", "9 xby ")
+      .replaceAll("([0-9]+)( *)(square|sq) ?\\.?(feet|foot|ft)\\.?", "\\1sq.ft. ")
+      .replaceAll("([0-9]+)( *)(gallons|gallon|gal)\\.?", "\\gal. ")
+      .replaceAll("([0-9]+)( *)(ounces|ounce|oz)\\.?", "\\1oz. ")
+      .replaceAll("([0-9]+)( *)(centimeters|cm)\\.?\", r\"\\1cm. ", "\\1cm. ")
+      .replaceAll("([0-9]+)( *)(milimeters|mm)\\.?", "\\1mm. ")
+      .replaceAll("([0-9]+)( *)(degrees|degree)\\.?", "\\1deg. ")
+      .replaceAll("([0-9]+)( *)(volts|volt)\\.?", "\\1volt. ")
+      .replaceAll("([0-9]+)( *)(watts|watt)\\.?", "\\1watt. ")
+      .replaceAll("([0-9]+)( *)(amperes|ampere|amps|amp)\\.?", "\\1amp. ")
+      .replaceAll("whirpool", "\\1amp. ")
+      .replaceAll("whirlpoolga", "whirlpool")
+      .replaceAll("whirlpoolstainless", "whirlpool stainless")
       .replaceFirst("WrappedArray", "")
     //         .replaceAll("""[\p{Punct}&&[^.]]""", "")
 
@@ -192,7 +239,7 @@ class DataframeManager() extends Serializable {
 
     val newRDD = joinedRDDResult.
       map(x => (x._1.toString, x._2.toString))
-    print("newRDD count : " + newRDD.count())
+    println("newRDD count : " + newRDD.count())
 
     val finalRenamedDF = sparkSession.createDataFrame(newRDD).toDF("rProductUID", "rFilteredWords")
 
@@ -349,7 +396,7 @@ class DataframeManager() extends Serializable {
     // Hasing TF
     val hashingTF = new HashingTF().setInputCol("filtered_description")
       .setOutputCol("raw_features")
-      .setNumFeatures(144)
+      .setNumFeatures(1000)
     val raw_feature_df = hashingTF.transform(filtered_words_df)
 
     // Apply IDF
@@ -397,10 +444,10 @@ class DataframeManager() extends Serializable {
     val relevanceDF = joined_df.select("product_uid", "relevance")
       .withColumn("rowIndex", monotonically_increasing_id())
 
-    // Binarize relevance: 0<- 1.5 <
-    // relevance < 1.5 -> 0
-    // relevance =>1.5 -> 1
-    val relevance_binarizer = udf((x: Double) => if (x < 1.5) 0 else 1)
+    // Binarize relevance: 0<- 2.5 <
+    // relevance < 2.5 -> 0
+    // relevance =>2.5 -> 1
+    val relevance_binarizer = udf((x: Double) => if (x < 2.5) 0 else 1)
 
     val cosineDF = rddToDF.join(relevanceDF, rddToDF("rowIndex") === relevanceDF("rowIndex"), "inner")
       .withColumn("binarized_relevance", lit(relevance_binarizer(col("relevance").cast("Double"))))
@@ -423,7 +470,8 @@ class DataframeManager() extends Serializable {
   def getTopFeatures(sc: SparkContext, numOfFeat: Int): RDD[LabeledPoint] = {
     val data = MLUtils.loadLibSVMFile(sc, "src/main/resources/trainLabeledVectors.csv")
 
-    val selector = new ChiSqSelector(numOfFeat)
+    val selector = new ChiSqSelector()
+    selector.setPercentile(0.05)
     // Create ChiSqSelector model (selecting features)
     val transformer = selector.fit(data)
     // Filter the top 50 features from each feature vector
@@ -458,7 +506,7 @@ class DataframeManager() extends Serializable {
 
     /*MinHashModel*/
     val tempMinHashModel = transformer.last.asInstanceOf[MinHashLSHModel]
-    val threshold = 1.5
+    val threshold = 2.5
 
     /*Just a udf for converting string to double*/
     val udf_toDouble = udf( (s: String) => s.toDouble )
@@ -476,7 +524,7 @@ class DataframeManager() extends Serializable {
       .setInputCols(Array("distCol"))
       .setOutputCol("Similarity")
 
-    val relevance_binarizer = udf((x: Double) => if (x < 1.5) 0 else 1)
+    val relevance_binarizer = udf((x: Double) => if (x < 2.5) 0 else 1)
 
     val jaccardSimilarityDF = vectorAssem.transform(preSimilarityDF).select("Similarity","relevance")
       .withColumn("binarized_relevance", lit(relevance_binarizer(col("relevance").cast("Double"))))
@@ -511,7 +559,7 @@ class DataframeManager() extends Serializable {
     val tempMinHashModel = transformer.last.asInstanceOf[BucketedRandomProjectionLSHModel]
 
     /*Threshold*/
-    val threshold = 1.5
+    val threshold = 2.5
 
     /*Just a udf for converting string to double*/
     val udf_toDouble = udf( (s: String) => s.toDouble )
@@ -525,7 +573,7 @@ class DataframeManager() extends Serializable {
       .setInputCols(Array("distCol"))
       .setOutputCol("Similarity")
 
-    val relevance_binarizer = udf((x: Double) => if (x < 1.5) 0 else 1)
+    val relevance_binarizer = udf((x: Double) => if (x < 2.5) 0 else 1)
     val euclideanSimilarityDF = vectorAssem2.transform(preEuclideanSimilarityDF).select("Similarity","relevance")
       .withColumn("binarized_relevance", lit(relevance_binarizer(col("relevance").cast("Double"))))
 

@@ -23,7 +23,7 @@ class LinearRegression extends Serializable {
     println("")
     println("Applying Linear regression...")
 
-    val model = LinearRegressionWithSGD.train(trainingData, 100, 0.3)
+    val model = LinearRegressionWithSGD.train(trainingData, 10000, 0.4)
 
     /** Evaluation of Linear Regression on test instances and compute test error */
     val labelsAndPredictions = testData.map { point =>
